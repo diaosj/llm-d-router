@@ -312,6 +312,7 @@ func (s *Server) runNIXLV2Serial(
 	prefillStart := time.Now()
 
 	preq := r.Clone(pCtx)
+	setPrefillDPRank(preq)
 	preq.Header.Add(reqcommon.RequestIDHeaderKey, uuidStr)
 
 	// KV metadata uses global ranks; HTTP dispatch uses pod-local ranks.
@@ -321,7 +322,7 @@ func (s *Server) runNIXLV2Serial(
 		s.config.MoRIIODPSizeLocal,
 	)
 	if s.config.MoRIIODPSize > 1 {
-		preq.Header.Set(requestHeaderDataParallelRank, strconv.Itoa(localDPRank))
+		preq.Header.Set(routing.DataParallelRankHeader, strconv.Itoa(localDPRank))
 	}
 
 	prefillKV := s.buildNIXLV2SerialPrefillKVParams(ctx, uuidStr, globalDPRank, source)
@@ -423,7 +424,7 @@ retryLoop:
 		return
 	}
 	if decodeLocalRank != "" {
-		dreq.Header.Set(requestHeaderDataParallelRank, decodeLocalRank)
+		dreq.Header.Set(routing.DataParallelRankHeader, decodeLocalRank)
 	}
 
 	wrapDecodeWriter, observeDecodeSpan, dispatchDecode, dbodyLen, ok := leg.prepareDecode(w, r, dreq, uuidStr, pKVTransferParams)
@@ -670,9 +671,10 @@ func (s *Server) executeNIXLV2WriteParallel(
 		semconv.LLMDPDProxyParallelDispatch(true),
 	)
 	preq := r.Clone(pCtx)
+	setPrefillDPRank(preq)
 	preq.Header.Set(reqcommon.RequestIDHeaderKey, uuidStr)
 	if s.config.MoRIIODPSize > 1 {
-		preq.Header.Set(requestHeaderDataParallelRank, strconv.Itoa(dpRank))
+		preq.Header.Set(routing.DataParallelRankHeader, strconv.Itoa(dpRank))
 	}
 	pbodyLen := leg.preparePrefill(preq, prefillSpan)
 
@@ -688,7 +690,7 @@ func (s *Server) executeNIXLV2WriteParallel(
 	dreq := r.Clone(dCtx)
 	dreq.Header.Set(reqcommon.RequestIDHeaderKey, uuidStr)
 	if s.config.MoRIIODPSize > 1 {
-		dreq.Header.Set(requestHeaderDataParallelRank, strconv.Itoa(dpRank))
+		dreq.Header.Set(routing.DataParallelRankHeader, strconv.Itoa(dpRank))
 	}
 	dbodyLen := leg.prepareDecode(dreq)
 
