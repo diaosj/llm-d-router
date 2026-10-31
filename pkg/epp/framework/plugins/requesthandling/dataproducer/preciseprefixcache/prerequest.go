@@ -429,7 +429,7 @@ func (p *Producer) PreRequest(ctx context.Context,
 		if md == nil {
 			continue
 		}
-		podID := fmt.Sprintf("%s:%s", md.Address, md.Port)
+		podID := p.indexPodIdentifier(md)
 		prompts := state.perFormatKeys[p.kvCacheIndexer.CacheFormat(podID)]
 		for _, promptKeys := range prompts {
 			if len(promptKeys) > 0 {
