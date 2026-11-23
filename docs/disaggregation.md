@@ -65,14 +65,19 @@ only then.
 When the Prefill Worker serves several data-parallel ranks behind its port (see [Data-parallel ranks behind one port](data-parallel-ranks.md)), EPP also sends
 `x-llm-d-prefiller-data-parallel-rank` with the data-parallel rank it picked on
 the Prefill Worker. The sidecar sends that rank to the Prefill Worker as
-`x-data-parallel-rank`. Without the header, the sidecar removes
-`x-data-parallel-rank` from the prefill request, so the decode rank does not
-reach the Prefill Worker and vLLM picks the prefill rank itself. With
-`--moriio-dp-size` above 1, the sidecar picks both ranks itself and ignores the
-header. With `--kv-connector=sglang`, the sidecar also sets the prefill rank as
-`disagg_prefill_dp_rank` in both request bodies: SGLang's prefill otherwise
-requires the rank `bootstrap_room % dp_size`, and its decode uses the field to
-find the prefill rank.
+`x-data-parallel-rank`. When only the Decode Worker is a rank endpoint, EPP
+sends `x-llm-d-prefiller-data-parallel-rank: none`, and the sidecar removes
+`x-data-parallel-rank` from the prefill request so the decode rank does not
+reach the Prefill Worker. When neither worker is a rank endpoint, EPP omits the
+header and the sidecar leaves any client or gateway `x-data-parallel-rank`
+header unchanged on both legs. With `--moriio-dp-size` above 1, the sidecar
+picks both ranks itself and ignores the header. With `--kv-connector=sglang`,
+the sidecar also sets `disagg_prefill_dp_rank` on both legs and sets each leg's
+`routed_dp_rank` in the JSON body or gRPC `GenerateRequest`: without
+`disagg_prefill_dp_rank` (and without
+`SGLANG_DISAGGREGATION_FORCE_QUERY_PREFILL_DP_RANK=1`), SGLang's prefill
+defaults to rank `bootstrap_room % dp_size`, and its decode reads
+`disagg_prefill_dp_rank` to find the prefill rank.
 
 The sidecar strips every spelling before forwarding, and EPP drops any value a
 client supplies, so these headers are internal to the EPP-to-sidecar hop and are

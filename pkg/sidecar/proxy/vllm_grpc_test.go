@@ -529,7 +529,9 @@ func TestVLLMGRPCPDConnectorsUnaryAndStream(t *testing.T) {
 			wantCachedCount:    40,
 			extraHeaders: func(prefillAddr string) map[string]string {
 				return map[string]string{
-					routing.KVCachePrefillHeader: net.JoinHostPort(routing.ExtractHost(prefillAddr), strconv.Itoa(p2pTierPort)),
+					routing.KVCachePrefillHeader:          net.JoinHostPort(routing.ExtractHost(prefillAddr), strconv.Itoa(p2pTierPort)),
+					routing.DataParallelRankHeader:        "0",
+					routing.PrefillDataParallelRankHeader: "2",
 				}
 			},
 			verifyLegs: func(t *testing.T, prefillCall, decodeCall grpctest.VLLMCall, prefillAddr string) {
@@ -542,6 +544,8 @@ func TestVLLMGRPCPDConnectorsUnaryAndStream(t *testing.T) {
 				assert.Equal(t, rd["kv_request_id"], rp["kv_request_id"])
 				assert.Equal(t, routing.ExtractHost(prefillAddr), rp["remote_host"])
 				assert.Equal(t, float64(p2pTierPort), rp["remote_port"])
+				assert.Equal(t, "2", prefillCall.Header.Get(routing.DataParallelRankHeader))
+				assert.Equal(t, "0", decodeCall.Header.Get(routing.DataParallelRankHeader))
 			},
 		},
 		{
@@ -549,9 +553,17 @@ func TestVLLMGRPCPDConnectorsUnaryAndStream(t *testing.T) {
 			connector:          constants.KVConnectorSharedStorage,
 			prefillCachedCount: 28,
 			wantCachedCount:    28,
+			extraHeaders: func(string) map[string]string {
+				return map[string]string{
+					routing.DataParallelRankHeader:        "1",
+					routing.PrefillDataParallelRankHeader: routing.NoDataParallelRank,
+				}
+			},
 			verifyLegs: func(t *testing.T, prefillCall, decodeCall grpctest.VLLMCall, _ string) {
 				assert.Nil(t, prefillCall.Request.GetKv().GetKvTransferParams())
 				assert.Nil(t, decodeCall.Request.GetKv().GetKvTransferParams())
+				assert.Empty(t, prefillCall.Header.Get(routing.DataParallelRankHeader))
+				assert.Equal(t, "1", decodeCall.Header.Get(routing.DataParallelRankHeader))
 			},
 		},
 	}

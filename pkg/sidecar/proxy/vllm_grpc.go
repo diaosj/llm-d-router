@@ -699,6 +699,7 @@ func (l *vllmSequentialPDLeg) runPrefill(
 	_ trace.Span,
 ) error {
 	preq := r.Clone(prefillCtx)
+	setPrefillDPRank(preq)
 	setUnaryGeneratePath(preq)
 	grpcframe.SetSegmentedBody(preq, l.psegs)
 	return servePrefill(prefillHandler, pw, preq)
