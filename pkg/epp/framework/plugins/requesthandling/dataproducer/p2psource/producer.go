@@ -371,6 +371,7 @@ func (p *Producer) Consumes() plugin.DataDependencies {
 // chosen peer's own count, which may be one block below the pool maximum.
 type bestMatchPeer struct {
 	hostPort     string
+	rankIndex    int
 	address      string
 	p2pPort      int
 	cachedTokens int
@@ -433,7 +434,7 @@ func (p *Producer) Produce(ctx context.Context, request *scheduling.InferenceReq
 		if !ok {
 			log.FromContext(ctx).WithName(p.typedName.String()).V(logging.DEBUG).Info(
 				"endpoint cannot serve as a P2P source: P2P tier port is outside 1-65535",
-				"requestID", request.RequestID, "endpoint", md.ID, "p2pConnectorPort", p.p2pConnectorPort, "rank", md.GetRankIndex())
+				"requestID", request.RequestID, "endpoint", md.ID, "p2pConnectorPort", p.p2pConnectorPort, "rank", p2pRank(md))
 			continue
 		}
 		matches = append(matches, sourceMatch{ep: ep, p2pPort: p2pPort, cached: cached, blockSize: blockSize, hasTierData: hasTierData})
@@ -490,6 +491,7 @@ func (p *Producer) Produce(ctx context.Context, request *scheduling.InferenceReq
 			md := candidates[chosen].ep.GetMetadata()
 			best = bestMatchPeer{
 				hostPort:     net.JoinHostPort(md.Address, md.Port),
+				rankIndex:    md.GetRankIndex(),
 				address:      md.Address,
 				p2pPort:      candidates[chosen].p2pPort,
 				cachedTokens: candidates[chosen].cached,
@@ -611,7 +613,7 @@ func (p *Producer) PreRequest(ctx context.Context, request *scheduling.Inference
 			p2pPort, ok := p.p2pPort(md)
 			if !ok {
 				outcome = "prefill-port-invalid"
-				return fmt.Errorf("endpoint %s: p2pConnectorPort %d plus rank %d is outside 1-65535", md.ID, p.p2pConnectorPort, md.GetRankIndex())
+				return fmt.Errorf("endpoint %s: p2pConnectorPort %d plus rank %d is outside 1-65535", md.ID, p.p2pConnectorPort, p2pRank(md))
 			}
 			routing.SetRoutingHeader(request.Headers, routing.KVCachePrefillHeader, net.JoinHostPort(md.Address, strconv.Itoa(p2pPort)))
 		}
@@ -644,7 +646,7 @@ func (p *Producer) PreRequest(ctx context.Context, request *scheduling.Inference
 	// delta check below only covers the first endpoint; with
 	// maxNumOfEndpoints > 1 the routing layer receives every selected
 	// endpoint and may serve the request from any of them.
-	if isSelected(best.hostPort, computing.TargetEndpoints) {
+	if isSelected(best, computing.TargetEndpoints) {
 		outcome = "self"
 		return nil
 	}
@@ -692,14 +694,25 @@ func (p *Producer) PreRequest(ctx context.Context, request *scheduling.Inference
 	return nil
 }
 
-// isSelected reports whether hostPort names one of the selected endpoints.
-func isSelected(hostPort string, endpoints []scheduling.Endpoint) bool {
+// isSelected reports whether best names one of the selected endpoints. Another
+// rank endpoint behind the same serving host:port has its own P2P tier port and
+// is a valid source peer.
+func isSelected(best *bestMatchPeer, endpoints []scheduling.Endpoint) bool {
 	for _, ep := range endpoints {
-		if md := ep.GetMetadata(); md != nil && net.JoinHostPort(md.Address, md.Port) == hostPort {
+		if md := ep.GetMetadata(); md != nil &&
+			net.JoinHostPort(md.Address, md.Port) == best.hostPort &&
+			md.GetRankIndex() == best.rankIndex {
 			return true
 		}
 	}
 	return false
+}
+
+func p2pRank(md *fwkdl.EndpointMetadata) int {
+	if md.RanksPerPort > 1 {
+		return md.DataParallelRank
+	}
+	return md.GetRankIndex()
 }
 
 // p2pPort returns the endpoint's OffloadingConnector P2P tier port, the rank-0
@@ -708,11 +721,7 @@ func isSelected(hostPort string, endpoints []scheduling.Endpoint) bool {
 // vLLM offsets the port by the global rank, which a rank endpoint carries in
 // DataParallelRank.
 func (p *Producer) p2pPort(md *fwkdl.EndpointMetadata) (int, bool) {
-	rank := md.GetRankIndex()
-	if md.RanksPerPort > 1 {
-		rank = md.DataParallelRank
-	}
-	return routing.RankPort(p.p2pConnectorPort, rank)
+	return routing.RankPort(p.p2pConnectorPort, p2pRank(md))
 }
 
 // cpuDeviceTier is the CachedBlocksByTier key for the CPU tier (device tiers
