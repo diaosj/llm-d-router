@@ -13,7 +13,7 @@ When the scheduler picks a rank endpoint, the EPP:
 
 Requests to endpoints without ranks keep their headers and fallbacks.
 
-Each rank endpoint reads its own engine's metrics series (see the [metrics extractor](../pkg/epp/framework/plugins/datalayer/extractor/metrics/README.md#families-with-several-series)) and, with the [precise prefix cache](../pkg/epp/framework/plugins/requestcontrol/dataproducer/preciseprefixcache/README.md), its own KV events.
+Each rank endpoint reads its own engine's metrics series (see the [metrics extractor](../pkg/epp/framework/plugins/datalayer/extractor/metrics/README.md#families-with-several-series)) and, with the [precise prefix cache](../pkg/epp/framework/plugins/requesthandling/dataproducer/preciseprefixcache/README.md), its own KV events.
 
 ## SGLang
 
